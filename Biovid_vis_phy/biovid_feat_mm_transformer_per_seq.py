@@ -18,7 +18,7 @@ from torchvision import models
 from tqdm import tqdm
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from validate import validate_mmtransformer_per_seq
-from models.models_seq import  VIS_PHY_MODEL, MultimodalTransformer
+from models.models_seq import  VIS_PHY_MODEL, Two_cross_attention
 
 
 
@@ -67,7 +67,7 @@ def train(train_annotation,test_annotation,concat_m_path, weight_name):
     criterion = nn.CrossEntropyLoss()
 
     vis_phy_model=VIS_PHY_MODEL(concat_m_path).to(device=device)
-    mm_transformer = MultimodalTransformer(visual_dim=512, physiological_dim=512, num_heads=1, hidden_dim=512, num_layers=1, num_classes=2)
+    mm_transformer = Two_cross_attention(visual_dim=512, physiological_dim=512, num_heads=1, hidden_dim=512, num_layers=1, num_classes=2)
 
     mm_transformer = mm_transformer.to(device=device)
 
@@ -238,7 +238,7 @@ def test(test_annotation,concat_m_path, test_weight_vis_phy, test_weight_mm_tran
     vis_phy_model.load_state_dict(torch.load(vis_phy_model_checkpoint_path))
     vis_phy_model.eval()
     
-    mm_transformer = MultimodalTransformer(visual_dim=512, physiological_dim=512, num_heads=1, hidden_dim=512, num_layers=1, num_classes=2)
+    mm_transformer = Two_cross_attention(visual_dim=512, physiological_dim=512, num_heads=1, hidden_dim=512, num_layers=1, num_classes=2)
     mm_transformer = mm_transformer.to(device=device)
     transformer_model_checkpoint_path = f'/projets2/AS84330/Projets/MM_transformer/biovid_codes/all_weights/best_weights_ca_transformers_84.6/{test_weight_mm_transformer}'
     mm_transformer.load_state_dict(torch.load(transformer_model_checkpoint_path))

@@ -5,12 +5,19 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Current File",
-            "type": "python",
+            "name": "My debugger",
+            "type": "debugpy",
             "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal",
-            "justMyCode": true
+            "program": "${workspaceFolder}/main.py",
+            "args": [
+            "--cudaid", "0",
+            "--fusion_technique","Multi_cross_attention",
+            "--num_epochs", "20",
+            "--batch_size", "128", 
+            "--lr_backbones", "0",
+            "--lr_fusion", "0.000005",
+        ],
+            "console": "integratedTerminal"
         }
     ]
 }

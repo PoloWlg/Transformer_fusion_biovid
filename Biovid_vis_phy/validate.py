@@ -1,4 +1,4 @@
-from video_dataset_mm import  VideoFrameDataset, ImglistToTensor
+from .video_dataset_mm import  VideoFrameDataset, ImglistToTensor
 from comet_ml import Experiment
 from torchvision import transforms
 import torch

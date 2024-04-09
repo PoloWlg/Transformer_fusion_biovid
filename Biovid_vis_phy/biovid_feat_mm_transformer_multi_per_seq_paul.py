@@ -18,7 +18,7 @@ from torchvision import models
 from tqdm import tqdm
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from validate import validate_mmtransformer_per_seq
-from models.models_seq import  VIS_PHY_MODEL, MultimodalTransformer_multi  
+from models.models_seq import  VIS_PHY_MODEL, Multi_cross_attention  
 
 # seed = 42
 # torch.manual_seed(seed)
@@ -78,7 +78,7 @@ def train(train_annotation,test_annotation,concat_m_path, weight_name):
     criterion = nn.CrossEntropyLoss()
 
     vis_phy_model=VIS_PHY_MODEL(concat_m_path).to(device=device)
-    mm_transformer = MultimodalTransformer_multi(visual_dim=512, physiological_dim=512, num_heads=1, hidden_dim=512, num_layers=1, num_classes=2)
+    mm_transformer = Multi_cross_attention(visual_dim=512, physiological_dim=512, num_heads=1, hidden_dim=512, num_layers=1, num_classes=2)
 
     mm_transformer = mm_transformer.to(device=device)
     # classifier_m = classifier_m.to(device=device)

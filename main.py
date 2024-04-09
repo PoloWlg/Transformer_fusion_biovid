@@ -1,6 +1,6 @@
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "3"
-from video_dataset_mm import  VideoFrameDataset, ImglistToTensor
+from Biovid_vis_phy.video_dataset_mm import  VideoFrameDataset, ImglistToTensor
 from comet_ml import Experiment
 from torchvision import transforms
 import torch
@@ -12,13 +12,14 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-import random
 from torchvision.models.video import r3d_18
 from torchvision import models
 from tqdm import tqdm
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from validate import validate_mmtransformer_per_seq
-from models.models_seq import  VIS_PHY_MODEL, Multi_cross_attention  
+from Biovid_vis_phy.validate import validate_mmtransformer_per_seq
+from Biovid_vis_phy.models.models_seq import  VIS_PHY_MODEL, Multi_cross_attention,Two_cross_attention  
+from parseit import get_args
+
 
 # seed = 42
 # torch.manual_seed(seed)
@@ -32,21 +33,22 @@ def train(train_annotation,test_annotation,concat_m_path, weight_name):
     # videos_root = '/home/livia/work/Biovid/PartB/Video-Dataset-Loading-Pytorch-main/demo_dataset'
     train_annotation_file = os.path.join(videos_root,'../../5folds_annotations2', train_annotation)
     val_annotation_file = os.path.join(videos_root,'../../5folds_annotations2', test_annotation)
-    
+    args = get_args()
     
     """
-    Training settings
+        Training settings
     """
-    num_epochs = 100
+    num_epochs = args['num_epochs']
+    b_size = args['batch_size']
+    lr_vis_phy = args['lr_backbones']
+    lr_mmtransformer = args['lr_fusion']
+
     best_epoch = 0
     check_every = 1
-    b_size = 128
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-    lr_vis_phy = 0
-    lr_mmtransformer = 0.000005
+    
     
     # best learning rates 1:
     # lr_vis_phy = 0
@@ -69,25 +71,31 @@ def train(train_annotation,test_annotation,concat_m_path, weight_name):
     experiment.log_parameters(parameters)
 
 
-    num_frames = 5  # Number of frames in each video clip
-    num_channels = 3  # Number of channels (e.g., RGB)
-    video_length = 112  # Length of the video in each dimension
-    num_classes = 2  # Number of classes
+    # num_frames = 5  # Number of frames in each video clip
+    # num_channels = 3  # Number of channels (e.g., RGB)
+    # video_length = 112  # Length of the video in each dimension
+    # num_classes = 2  # Number of classes
 
 
     criterion = nn.CrossEntropyLoss()
 
     vis_phy_model=VIS_PHY_MODEL(concat_m_path).to(device=device)
-    mm_transformer = Multi_cross_attention(visual_dim=512, physiological_dim=512, num_heads=1, hidden_dim=512, num_layers=1, num_classes=2)
 
-    mm_transformer = mm_transformer.to(device=device)
-    # classifier_m = classifier_m.to(device=device)
+    fusion_model = None
+    if (args['fusion_technique'] == 'Multi_cross_attention'):
+        fusion_model = Multi_cross_attention(visual_dim=512, physiological_dim=512, num_heads=1, hidden_dim=512, num_layers=1, num_classes=2)
+    elif (args['fusion_technique'] == 'Two_cross_attention'):
+        fusion_model = Two_cross_attention(visual_dim=512, physiological_dim=512, num_heads=1, hidden_dim=512, num_layers=1, num_classes=2)
+    elif (args['fusion_technique'] == 'Feature_concat'):
+        raise NotImplementedError(args['fusion_technique'])
+    else:
+        raise NotImplementedError(args['fusion_technique'])
 
+    fusion_model = fusion_model.to(device=device)
 
-    # params = [{'params': vis_phy_model.parameters(), 'lr': lr_vis_phy},{'params': mm_transformer.parameters(), 'lr': lr_mmtransformer}]
 
     vis_phy_optimizer = optim.Adam(vis_phy_model.parameters(), lr=lr_vis_phy)
-    mmtransformer_optimizer = optim.Adam(mm_transformer.parameters(), lr=lr_mmtransformer)
+    mmtransformer_optimizer = optim.Adam(fusion_model.parameters(), lr=lr_mmtransformer)
 
 
     # vis_phy_mmtransformer_optimizer = optim.Adam(params)
@@ -140,20 +148,15 @@ def train(train_annotation,test_annotation,concat_m_path, weight_name):
     
     best_val_acc=0
     with experiment.train():
-        # for epoch in tqdm(range(num_epochs), desc='Epochs'):
         for epoch in range(num_epochs):
-            print("*********************************************\n")
-            # vis_phy_model.vis_model.train()
-            # vis_phy_model.phy_model.train()
+
             vis_phy_model.train()
-            mm_transformer.train()
-            
-            # classifier_m.train()
-            
+            fusion_model.train()
+
             running_loss = 0.0
             correct = 0
             total = 0
-            for i,(spec_2d,video_batch, labels, record_id) in tqdm(enumerate(train_dataloader,0),total=len(train_dataloader), desc=f'Training'):
+            for i,(spec_2d,video_batch, labels, record_images) in tqdm(enumerate(train_dataloader,0),total=len(train_dataloader), desc=f'Training'):
                 mmtransformer_optimizer.zero_grad()
                 vis_phy_optimizer.zero_grad()
                 
@@ -184,7 +187,7 @@ def train(train_annotation,test_annotation,concat_m_path, weight_name):
                 phy_feats_seqs = phy_feats_seqs.permute(1,0,2)
                 vis_feats_seqs = vis_feats_seqs.permute(1,0,2)
                 
-                outs = mm_transformer(vis_feats_seqs, phy_feats_seqs)
+                outs = fusion_model(vis_feats_seqs, phy_feats_seqs)
 
                 labels = labels.to(device)
                 t_loss = criterion(outs, labels)
@@ -211,7 +214,7 @@ def train(train_annotation,test_annotation,concat_m_path, weight_name):
             # last_lr=scheduler.get_last_lr()
             # experiment.log_metric('Learning Rate', last_lr,epoch= epoch)
             if epoch % check_every == 0:
-                val_acc, val_loss = validate_mmtransformer_per_seq(vis_phy_model,mm_transformer, val_dataloader, criterion, device)
+                val_acc, val_loss = validate_mmtransformer_per_seq(vis_phy_model,fusion_model, val_dataloader, criterion, device)
                 # print( "Validation accuracy: ", val_acc)
                 experiment.log_metric('Val Accuracy', val_acc,epoch= epoch)
                 experiment.log_metric('Val Loss', val_loss,epoch= epoch)
@@ -225,7 +228,7 @@ def train(train_annotation,test_annotation,concat_m_path, weight_name):
                     model_save_path_mmtransformer = os.path.join('/projets2/AS84330/Projets/MM_transformer/biovid_codes/temp_weights',f'{weight_name}{round(best_val_acc,2)}.pth')
 
                     torch.save(vis_phy_model.state_dict(), model_save_path_bb)
-                    torch.save(mm_transformer.state_dict(), model_save_path_mmtransformer)  
+                    torch.save(fusion_model.state_dict(), model_save_path_mmtransformer)  
                     print('Best model saved at epoch: ', epoch+1)
                     best_epoch = epoch+1
 

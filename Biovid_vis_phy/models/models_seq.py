@@ -347,9 +347,9 @@ class TransformerEncoderLayer(nn.Module):
         x = self.layer_norm2(x)
         return x
 
-class MultimodalTransformer(nn.Module):
+class Two_cross_attention(nn.Module):
     def __init__(self, visual_dim, physiological_dim, num_heads, hidden_dim, num_layers, num_classes):
-        super(MultimodalTransformer, self).__init__()
+        super(Two_cross_attention, self).__init__()
         self.visual_encoder = TransformerEncoderBlock(visual_dim, num_heads, hidden_dim, num_layers)
         self.physiological_encoder = TransformerEncoderBlock(physiological_dim, num_heads, hidden_dim, num_layers)
         self.cross_attention_v = nn.MultiheadAttention(visual_dim, num_heads)
@@ -409,9 +409,9 @@ class MultimodalTransformer(nn.Module):
         return output[3]
     
 
-class MultimodalTransformer_multi(nn.Module):
+class Multi_cross_attention(nn.Module):
     def __init__(self, visual_dim, physiological_dim, num_heads, hidden_dim, num_layers, num_classes):
-        super(MultimodalTransformer_multi, self).__init__()
+        super(Multi_cross_attention, self).__init__()
         
         # Encoder blocks
         self.visual_encoder = TransformerEncoderBlock(visual_dim, num_heads, hidden_dim, num_layers)
