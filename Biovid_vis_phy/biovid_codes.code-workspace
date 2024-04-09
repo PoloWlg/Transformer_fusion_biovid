@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"name": "biovid_codes",
+			"path": ".."
+		}
+	],
+	"settings": {
+		"python.defaultInterpreterPath": "/home/ens/AS84330/anaconda3/bin/python"
+	}
+}

@@ -1,0 +1,4 @@
+*.pth
+acc.txt
+__pycache__
+all_weights
