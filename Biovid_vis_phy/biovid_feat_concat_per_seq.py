@@ -72,7 +72,7 @@ def train(train_annotation,test_annotation,v_m_path,phy_m_path,weight_path):
 
     
 
-    videos_root = '/projets2/AS84330/Datasets/Biovid/PartA/subject_images/subject_images_organised'
+    videos_root = '/projets2/AS84330/Datasets/Biovid/PartA'
     # videos_root = '/home/livia/work/Biovid/PartB/Video-Dataset-Loading-Pytorch-main/demo_dataset'
     five_fold_annotations_path = '/projets2/AS84330/Datasets/Biovid/PartA/5folds_annotations2/'
     train_annotation_file = os.path.join(five_fold_annotations_path, train_annotation)
@@ -241,7 +241,7 @@ def test(test_annotation,v_m_path,phy_m_path, test_weights):
 
 ##### Train + Evaluate #####
 if __name__ == '__main__':
-    dir_name = '/projets2/AS84330/Projets/MM_transformer/biovid_codes/temp_weights_test_1_apr_2024'
+    dir_name = '/projets2/AS84330/Projets/MM_transformer/biovid_codes/temp_weights_test_1_apr_2024gredazdg'
     os.mkdir(dir_name)
     kfold_accuracy = []
     for i in range (1,6):

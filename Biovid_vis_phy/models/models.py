@@ -186,6 +186,32 @@ class VIS_PHY_MODEL_CONCAT(nn.Module):
         return vis_out,phy_out
 
 
+class Concat_plus_fc(nn.Module):
+    
+    def __init__(self):
+        super(VIS_PHY_MODEL_CONCAT,self).__init__()
+        self.out_layer1=nn.Linear(1024,512)
+        self.out_layer2=nn.Linear(512,256)
+        self.out_layer3=nn.Linear(256,64)  
+        self.out_layer4=nn.Linear(64,num_classes)  
+        
+        self.relu = nn.ReLU() 
+        
+    def forward(self, vis_feats, phy_feats):
+        output = torch.cat((vis_feats,phy_feats),1)
+        
+        output = self.out_layer1(output)
+        output = self.relu(output)
+        output = self.out_layer2(output)
+        output = self.relu(output)
+        output = self.out_layer3(output)
+        output = self.relu(output)
+        output = self.out_layer4(output)
+        
+        return output
+        
+
+
 
 class VIS_PHY_MODEL(nn.Module):
     def __init__(self,concat_m_path):

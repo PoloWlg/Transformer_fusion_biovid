@@ -7,7 +7,7 @@ import torch
 from typing import List, Union, Tuple, Any
 import pandas as pd
 from scipy.signal import cwt, morlet, spectrogram
-from .physio_transforms import get_cwt_scalograms, filter_emg, get_spectrograms
+from physio_transforms import get_cwt_scalograms, filter_emg, get_spectrograms
 from torch.utils.data import Dataset
 
 seed = 42
@@ -133,7 +133,7 @@ class VideoFrameDataset(torch.utils.data.Dataset):
         self.imagefile_template = imagefile_template
         self.transform = transform
         self.test_mode = test_mode
-        self.biosignals_filtered_path = os.path.join(root_path, '../../physio/physio_organised')
+        self.biosignals_filtered_path = os.path.join(root_path, 'physio/physio_organised')
 
         self._parse_annotationfile()
         self._sanity_check_samples()
@@ -171,7 +171,7 @@ class VideoFrameDataset(torch.utils.data.Dataset):
         
 
     def _parse_annotationfile(self):
-        self.video_list = [VideoRecord(x.strip().split(), self.root_path) for x in open(self.annotationfile_path)]
+        self.video_list = [VideoRecord(x.strip().split(), os.path.join(self.root_path, "subject_images/subject_images_organised")) for x in open(self.annotationfile_path)]
 
     def _sanity_check_samples(self):
         for record in self.video_list:

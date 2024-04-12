@@ -11,11 +11,13 @@
             "program": "${workspaceFolder}/main.py",
             "args": [
             "--cudaid", "0",
-            "--fusion_technique","Multi_cross_attention",
+            "--fusion_technique","Feature_concat",
             "--num_epochs", "20",
             "--batch_size", "128", 
             "--lr_backbones", "0",
             "--lr_fusion", "0.000005",
+            "--SEED", "True",
+            "--exp_id","Test_Id"
         ],
             "console": "integratedTerminal"
         }

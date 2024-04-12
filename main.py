@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import ImageGrid
 import statistics
 
+import random
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -17,23 +18,50 @@ from torchvision import models
 from tqdm import tqdm
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from Biovid_vis_phy.validate import validate_mmtransformer_per_seq
-from Biovid_vis_phy.models.models_seq import  VIS_PHY_MODEL, Multi_cross_attention,Two_cross_attention  
+from Biovid_vis_phy.models.models_seq import  VIS_PHY_MODEL, Multi_cross_attention,Two_cross_attention, Concat_plus_fc
 from parseit import get_args
 
-
-# seed = 42
-# torch.manual_seed(seed)
-# random.seed(seed)
+from tools import fmsg
 
 
+from dllogger import ArbJSONStreamBackend
+from dllogger import Verbosity
+from dllogger import ArbStdOutBackend
+from dllogger import ArbTextStreamBackend
+import dllogger as DLLogger
 
-def train(train_annotation,test_annotation,concat_m_path, weight_name):
-    
-    videos_root = '/projets2/AS84330/Datasets/Biovid/PartA/subject_images/subject_images_organised'
-    # videos_root = '/home/livia/work/Biovid/PartB/Video-Dataset-Loading-Pytorch-main/demo_dataset'
-    train_annotation_file = os.path.join(videos_root,'../../5folds_annotations2', train_annotation)
-    val_annotation_file = os.path.join(videos_root,'../../5folds_annotations2', test_annotation)
+import datetime as dt
+
+
+def train(train_annotation,test_annotation,concat_m_path, weight_name_visphy, weight_name_fusion):
     args = get_args()
+
+    # Init logging 
+    log_backends = [
+            ArbJSONStreamBackend(Verbosity.VERBOSE,
+                                 os.path.join(args['outd'], "log.json")),
+            ArbTextStreamBackend(Verbosity.VERBOSE,
+                                 os.path.join(args['outd'], "log.txt")),
+        ]
+
+    # if args['verbose']:
+    #     log_backends.append(ArbStdOutBackend(Verbosity.VERBOSE))
+
+    DLLogger.init_arb(backends=log_backends, master_pid=os.getpid())
+    args['t0'] = dt.datetime.now()
+    DLLogger.log(fmsg("Start time: {}".format(args['t0'])))
+    DLLogger.flush()
+
+    # '/projets2/AS84330/Datasets/Biovid/PartA/subject_images/subject_images_organised'
+    videos_root = '/projets2/AS84330/Datasets/Biovid/PartA'
+    train_annotation_file = os.path.join(videos_root, '5folds_annotations2', train_annotation)
+    val_annotation_file = os.path.join(videos_root, '5folds_annotations2', test_annotation)
+    
+
+    if (args['SEED'] == True):
+        seed = 42
+        torch.manual_seed(seed)
+        random.seed(seed)
     
     """
         Training settings
@@ -46,17 +74,7 @@ def train(train_annotation,test_annotation,concat_m_path, weight_name):
     best_epoch = 0
     check_every = 1
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
     
-    
-    # best learning rates 1:
-    # lr_vis_phy = 0
-    # lr_mmtransformer = 0.000005
-    
-    # Best learning rates_old:
-    # lr_vis_phy = 0
-    # lr_mmtransformer = 0.000005
 
     experiment = Experiment(
         api_key="17GX9zixZo9vF8cTq9qhF2nch",
@@ -87,7 +105,7 @@ def train(train_annotation,test_annotation,concat_m_path, weight_name):
     elif (args['fusion_technique'] == 'Two_cross_attention'):
         fusion_model = Two_cross_attention(visual_dim=512, physiological_dim=512, num_heads=1, hidden_dim=512, num_layers=1, num_classes=2)
     elif (args['fusion_technique'] == 'Feature_concat'):
-        raise NotImplementedError(args['fusion_technique'])
+        fusion_model=Concat_plus_fc()
     else:
         raise NotImplementedError(args['fusion_technique'])
 
@@ -95,7 +113,7 @@ def train(train_annotation,test_annotation,concat_m_path, weight_name):
 
 
     vis_phy_optimizer = optim.Adam(vis_phy_model.parameters(), lr=lr_vis_phy)
-    mmtransformer_optimizer = optim.Adam(fusion_model.parameters(), lr=lr_mmtransformer)
+    fusion_model_optimizer = optim.Adam(fusion_model.parameters(), lr=lr_mmtransformer)
 
 
     # vis_phy_mmtransformer_optimizer = optim.Adam(params)
@@ -145,24 +163,25 @@ def train(train_annotation,test_annotation,concat_m_path, weight_name):
         pin_memory=False)
 
 
-    
+    DLLogger.log(fmsg("Start Trainging"))
     best_val_acc=0
     with experiment.train():
         for epoch in range(num_epochs):
-
+            DLLogger.log(f'Epoch: {epoch}/{num_epochs-1}')
             vis_phy_model.train()
             fusion_model.train()
 
             running_loss = 0.0
             correct = 0
             total = 0
-            for i,(spec_2d,video_batch, labels, record_images) in tqdm(enumerate(train_dataloader,0),total=len(train_dataloader), desc=f'Training'):
-                mmtransformer_optimizer.zero_grad()
-                vis_phy_optimizer.zero_grad()
+            for i,(spec_2d,video_batch, labels, record_images) in tqdm(enumerate(train_dataloader,0),total=len(train_dataloader), desc=f'Training'):                
                 
+                fusion_model_optimizer.zero_grad()
+                vis_phy_optimizer.zero_grad()
 
                 video_batch=video_batch.permute(0, 2, 1, 3, 4)
                 video_batch = video_batch.to(device)
+                
                 
                 # Sequence of 20 frames unflattened to 4x5
                 unflatten = torch.nn.Unflatten(2, (4,5))
@@ -174,7 +193,7 @@ def train(train_annotation,test_annotation,concat_m_path, weight_name):
                 
 
                 
-                for count,video_batch_sequence in enumerate(video_batch):
+                for video_batch_sequence in video_batch:
                     vis_feats, phy_feats = vis_phy_model.model_out_feats(video_batch_sequence,spec_2d)
                     phy_feats_seqs.append(phy_feats.to(device))
                     vis_feats_seqs.append(vis_feats.to(device))
@@ -193,7 +212,7 @@ def train(train_annotation,test_annotation,concat_m_path, weight_name):
                 t_loss = criterion(outs, labels)
 
                 t_loss.backward()
-                mmtransformer_optimizer.step()
+                fusion_model_optimizer.step()
                 vis_phy_optimizer.step()
 
                 running_loss += t_loss.item()
@@ -208,30 +227,34 @@ def train(train_annotation,test_annotation,concat_m_path, weight_name):
             
             train_accuracy= 100 * correct / total
             print(f"Accuracy after epoch {epoch + 1}: {train_accuracy}%")
+            DLLogger.log(f'Training accuracy: {train_accuracy}%')
             train_loss= running_loss / 100
             experiment.log_metric('Loss', train_loss,epoch= epoch)
             experiment.log_metric('Accuracy', train_accuracy ,epoch= epoch)
-            # last_lr=scheduler.get_last_lr()
-            # experiment.log_metric('Learning Rate', last_lr,epoch= epoch)
             if epoch % check_every == 0:
                 val_acc, val_loss = validate_mmtransformer_per_seq(vis_phy_model,fusion_model, val_dataloader, criterion, device)
-                # print( "Validation accuracy: ", val_acc)
+                print(f'Validation accuracy: {val_acc}%')
+                print(f'Validation loss: {val_loss}')
+                
+                
                 experiment.log_metric('Val Accuracy', val_acc,epoch= epoch)
                 experiment.log_metric('Val Loss', val_loss,epoch= epoch)
-                # scheduler.step(val_acc)
-                current_lr = mmtransformer_optimizer.param_groups[0]['lr']
+                current_lr = fusion_model_optimizer.param_groups[0]['lr']
                 experiment.log_metric('Learning Rate', current_lr,epoch= epoch)
-                # print('Current learning rate: ', current_lr)
                 if val_acc > best_val_acc:
                     best_val_acc = val_acc
-                    model_save_path_bb = os.path.join('/projets2/AS84330/Projets/MM_transformer/biovid_codes/temp_weights',f'{weight_name}{round(best_val_acc,2)}_visphy.pth')
-                    model_save_path_mmtransformer = os.path.join('/projets2/AS84330/Projets/MM_transformer/biovid_codes/temp_weights',f'{weight_name}{round(best_val_acc,2)}.pth')
+                    model_save_path_visphy = os.path.join(args['outd'],'weights', f'{weight_name_visphy}.pth')
+                    model_save_path_fusion = os.path.join(args['outd'],'weights', f'{weight_name_fusion}.pth')
 
-                    torch.save(vis_phy_model.state_dict(), model_save_path_bb)
-                    torch.save(fusion_model.state_dict(), model_save_path_mmtransformer)  
+                    torch.save(vis_phy_model.state_dict(), model_save_path_visphy)
+                    torch.save(fusion_model.state_dict(), model_save_path_fusion)  
                     print('Best model saved at epoch: ', epoch+1)
-                    best_epoch = epoch+1
-
+                    best_epoch = epoch
+                DLLogger.log(f'Validation @EPOCH {epoch}: '
+                             f'accuracy: {round(val_acc,2)}% | ' 
+                             f'[BEST: {round(best_val_acc,2)}% '
+                             f'@EPOCH: {best_epoch}] \n ')  
+                DLLogger.flush()
 
     print("Finished Training")
 
@@ -257,10 +280,11 @@ if __name__ == '__main__':
     for i in range (1,6):
         train_annotation = f'train_fold{i}.txt'
         test_annotation = f'test_fold{i}.txt'
-        concat_m_path = f'/projets2/AS84330/Projets/MM_transformer/biovid_codes/all_weights/best_weights_feat_concat5_fps5_folddiff/model_best_feature_concat_fold{i}.pth'
+        concat_m_path = f'/home/ens/AS84330/transformer_biovid_code/pretrained_weights/best_weights_feat_concat/model_best_feature_concat_fold{i}.pth'
 
-        weight_name = f'model_best_feat_concat_fusion_multi_mmtransformer_fold{i}_'
-        best_accuracy = train(train_annotation,test_annotation,concat_m_path, weight_name)
+        weight_name_visphy = f'visphy_model_fold{i}_'
+        weight_name_fusion = f'fusion_model_fold{i}_'
+        best_accuracy = train(train_annotation,test_annotation,concat_m_path, weight_name_visphy,weight_name_fusion)
         kfold_accuracy.append(round(best_accuracy,1))
 
     print('accuracy on fold 1', kfold_accuracy[0])

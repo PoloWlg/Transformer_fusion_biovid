@@ -1,4 +1,4 @@
-from .video_dataset_mm import  VideoFrameDataset, ImglistToTensor
+from video_dataset_mm import  VideoFrameDataset, ImglistToTensor
 from comet_ml import Experiment
 from torchvision import transforms
 import torch
@@ -333,8 +333,6 @@ def validate_mmtransformer_per_seq(vis_phy_mod,mm_transformer, val_dataloader, c
 
     val_accuracy = 100 * val_correct / val_total
     avg_val_loss = ((val_t_loss)/2) / len(val_dataloader)
-    print(f'Validation accuracy: {val_accuracy}%')
-    print(f'Validation loss: {avg_val_loss}')
     return val_accuracy, avg_val_loss
 
 
