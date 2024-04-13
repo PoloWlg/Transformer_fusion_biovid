@@ -7,7 +7,7 @@ import torch
 from typing import List, Union, Tuple, Any
 import pandas as pd
 from scipy.signal import cwt, morlet, spectrogram
-from physio_transforms import get_cwt_scalograms, filter_emg, get_spectrograms
+from .physio_transforms import get_cwt_scalograms, filter_emg, get_spectrograms
 from torch.utils.data import Dataset
 
 seed = 42

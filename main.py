@@ -17,9 +17,11 @@ from torchvision.models.video import r3d_18
 from torchvision import models
 from tqdm import tqdm
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from Biovid_vis_phy.validate import validate_mmtransformer_per_seq
+from Biovid_vis_phy.validate import validate_mmtransformer_per_seq, validate_feat_concat
 from Biovid_vis_phy.models.models_seq import  VIS_PHY_MODEL, Multi_cross_attention,Two_cross_attention, Concat_plus_fc
 from parseit import get_args
+from Biovid_vis_phy.models.models import VIS_PHY_MODEL_CONCAT   
+
 
 from tools import fmsg
 
@@ -114,7 +116,7 @@ def train(train_annotation,test_annotation,concat_m_path, weight_name_visphy, we
 
     vis_phy_optimizer = optim.Adam(vis_phy_model.parameters(), lr=lr_vis_phy)
     fusion_model_optimizer = optim.Adam(fusion_model.parameters(), lr=lr_mmtransformer)
-
+    # vis_phy_model=VIS_PHY_MODEL_CONCAT(v_m_path,phy_m_path,2).to(device=device)
 
     # vis_phy_mmtransformer_optimizer = optim.Adam(params)
     # scheduler = optim.lr_scheduler.StepLR(vis_phy_optimizer, step_size=5, gamma=0.01)
@@ -132,8 +134,8 @@ def train(train_annotation,test_annotation,concat_m_path, weight_name_visphy, we
     train_dataset = VideoFrameDataset(
         root_path=videos_root,
         annotationfile_path=train_annotation_file,
-        num_segments=4,
-        frames_per_segment=5,
+        num_segments=1,
+        frames_per_segment=4,
         imagefile_template='img_{:05d}.jpg',
         transform=preprocess,
         test_mode=False)
@@ -141,8 +143,8 @@ def train(train_annotation,test_annotation,concat_m_path, weight_name_visphy, we
     val_dataset = VideoFrameDataset(
         root_path=videos_root,
         annotationfile_path=val_annotation_file,
-        num_segments=4,
-        frames_per_segment=5,
+        num_segments=1,
+        frames_per_segment=4,
         imagefile_template='img_{:05d}.jpg',
         transform=preprocess,
         test_mode=True)
@@ -178,37 +180,41 @@ def train(train_annotation,test_annotation,concat_m_path, weight_name_visphy, we
                 
                 fusion_model_optimizer.zero_grad()
                 vis_phy_optimizer.zero_grad()
+                
+                video_batch = video_batch.to(device)
+                labels = labels.to(device)
 
                 video_batch=video_batch.permute(0, 2, 1, 3, 4)
-                video_batch = video_batch.to(device)
-                
-                
-                # Sequence of 20 frames unflattened to 4x5
-                unflatten = torch.nn.Unflatten(2, (4,5))
-                video_batch = unflatten(video_batch)
-                video_batch=video_batch.permute(2, 0, 1, 3, 4, 5)
-                
-                phy_feats_seqs = []                   
-                vis_feats_seqs = []
-                
+                if (args['fusion_technique'] == 'Feature_concat'):
+                    vis_feats, phy_feats = vis_phy_model.model_out_feats(video_batch,spec_2d)
+                    outs = fusion_model(vis_feats, phy_feats)
+                else :
+                    # Other fusion techniques
+                    # Sequence of 20 frames unflattened to 4x5
+                    unflatten = torch.nn.Unflatten(2, (4,5))
+                    video_batch = unflatten(video_batch)
+                    video_batch=video_batch.permute(2, 0, 1, 3, 4, 5)
+                    
+                    phy_feats_seqs = []                   
+                    vis_feats_seqs = []
+                    
 
-                
-                for video_batch_sequence in video_batch:
-                    vis_feats, phy_feats = vis_phy_model.model_out_feats(video_batch_sequence,spec_2d)
-                    phy_feats_seqs.append(phy_feats.to(device))
-                    vis_feats_seqs.append(vis_feats.to(device))
-                
-                phy_feats_seqs = torch.stack(phy_feats_seqs)
-                vis_feats_seqs = torch.stack(vis_feats_seqs)
-                phy_feats_seqs.to(device)
-                vis_feats_seqs.to(device)
-                
-                phy_feats_seqs = phy_feats_seqs.permute(1,0,2)
-                vis_feats_seqs = vis_feats_seqs.permute(1,0,2)
-                
-                outs = fusion_model(vis_feats_seqs, phy_feats_seqs)
+                    
+                    for video_batch_sequence in video_batch:
+                        vis_feats, phy_feats = vis_phy_model.model_out_feats(video_batch_sequence,spec_2d)
+                        phy_feats_seqs.append(phy_feats.to(device))
+                        vis_feats_seqs.append(vis_feats.to(device))
+                    
+                    phy_feats_seqs = torch.stack(phy_feats_seqs)
+                    vis_feats_seqs = torch.stack(vis_feats_seqs)
+                    phy_feats_seqs.to(device)
+                    vis_feats_seqs.to(device)
+                    
+                    phy_feats_seqs = phy_feats_seqs.permute(1,0,2)
+                    vis_feats_seqs = vis_feats_seqs.permute(1,0,2)
+                    
+                    outs = fusion_model(vis_feats_seqs, phy_feats_seqs)
 
-                labels = labels.to(device)
                 t_loss = criterion(outs, labels)
 
                 t_loss.backward()
@@ -232,7 +238,7 @@ def train(train_annotation,test_annotation,concat_m_path, weight_name_visphy, we
             experiment.log_metric('Loss', train_loss,epoch= epoch)
             experiment.log_metric('Accuracy', train_accuracy ,epoch= epoch)
             if epoch % check_every == 0:
-                val_acc, val_loss = validate_mmtransformer_per_seq(vis_phy_model,fusion_model, val_dataloader, criterion, device)
+                val_acc, val_loss = validate_feat_concat(vis_phy_model,fusion_model, val_dataloader, criterion, device)
                 print(f'Validation accuracy: {val_acc}%')
                 print(f'Validation loss: {val_loss}')
                 
@@ -280,11 +286,11 @@ if __name__ == '__main__':
     for i in range (1,6):
         train_annotation = f'train_fold{i}.txt'
         test_annotation = f'test_fold{i}.txt'
-        concat_m_path = f'/home/ens/AS84330/transformer_biovid_code/pretrained_weights/best_weights_feat_concat/model_best_feature_concat_fold{i}.pth'
+        visphy_path = f'/home/ens/AS84330/transformer_biovid_code/pretrained_weights/best_weights_feat_concat/model_best_feature_concat_fold{i}.pth'
 
         weight_name_visphy = f'visphy_model_fold{i}_'
         weight_name_fusion = f'fusion_model_fold{i}_'
-        best_accuracy = train(train_annotation,test_annotation,concat_m_path, weight_name_visphy,weight_name_fusion)
+        best_accuracy = train(train_annotation,test_annotation,visphy_path, weight_name_visphy,weight_name_fusion)
         kfold_accuracy.append(round(best_accuracy,1))
 
     print('accuracy on fold 1', kfold_accuracy[0])

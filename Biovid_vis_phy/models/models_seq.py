@@ -175,7 +175,7 @@ class Concat_plus_fc(nn.Module):
         self.relu = nn.ReLU() 
         
     def forward(self, vis_feats, phy_feats):
-        output = torch.cat((vis_feats,phy_feats),2)
+        output = torch.cat((vis_feats,phy_feats),1)
         
         output = self.out_layer1(output)
         output = self.relu(output)

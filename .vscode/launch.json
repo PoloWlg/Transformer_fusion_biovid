@@ -14,8 +14,8 @@
             "--fusion_technique","Feature_concat",
             "--num_epochs", "20",
             "--batch_size", "128", 
-            "--lr_backbones", "0",
-            "--lr_fusion", "0.000005",
+            "--lr_backbones", "0.00001",
+            "--lr_fusion", "0.00001",
             "--SEED", "True",
             "--exp_id","Test_Id"
         ],

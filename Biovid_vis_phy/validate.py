@@ -1,4 +1,4 @@
-from video_dataset_mm import  VideoFrameDataset, ImglistToTensor
+from .video_dataset_mm import  VideoFrameDataset, ImglistToTensor
 from comet_ml import Experiment
 from torchvision import transforms
 import torch
@@ -130,30 +130,31 @@ def validate(vis_phy_mod, val_dataloader, criterion, device):
     return val_accuracy, avg_val_loss
 
 
-def validate_feat_concat(vis_phy_mod, val_dataloader, criterion, device):
+def validate_feat_concat(vis_phy_mod, fusion_model, val_dataloader, criterion, device):
     # Validation phase
     vis_phy_mod.vis_model.eval() 
     vis_phy_mod.phy_model.eval()
+    fusion_model.eval()
     val_correct = 0
     val_total = 0
     val_t_loss = 0.0
 
     with torch.no_grad():
         for val_data in tqdm(val_dataloader, total=len(val_dataloader), desc=f'Validation'):
-            spec_2d,val_inputs, val_labels = val_data
+            spec_2d,val_inputs, val_labels,_ = val_data
             val_inputs = val_inputs.to(device)
             val_labels = val_labels.to(device)
             val_inputs = val_inputs.permute(0, 2, 1, 3, 4)
             spec_2d = spec_2d.to(device= device, dtype=torch.float)
 
-            val_out = vis_phy_mod.feat_concat(val_inputs,spec_2d)
-
+            vis_feats, phy_feats = vis_phy_mod.model_out_feats(val_inputs,spec_2d)
+            outs = fusion_model(vis_feats, phy_feats)
 
             # val_physio_loss = criterion(val_out, val_labels)
-            val_t_loss += criterion(val_out, val_labels).item()
+            val_t_loss += criterion(outs, val_labels).item()
 
 
-            _, val_predicted = torch.max(val_out.data, 1)
+            _, val_predicted = torch.max(outs.data, 1)
             
             val_total += val_labels.size(0)
             val_correct += (val_predicted == val_labels).sum().item()
